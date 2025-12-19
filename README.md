@@ -35,23 +35,20 @@ public class Login extends JFrame {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setVisible(true);
 
-        // Botón ingresar
         btnIngresar.addActionListener(e -> init());
     }
 
-    // Método de validación del login
     public void init() {
         String usuario = txtUsuario.getText();
         String contra = txtContraseña.getText();
 
         try {
-            // Conexión a la base de datos
             Connection con = ConexionDB.getConexion();
 
-            // Consulta para obtener datos del usuario
+            //Consultar usuario
             String sql = """
-                SELECT password, activo, intentos
-                FROM usuarios_cliente
+                SELECT id, password, saldo, activo, intentos
+                FROM usuarios
                 WHERE username = ?
             """;
 
@@ -59,35 +56,36 @@ public class Login extends JFrame {
             ps.setString(1, usuario);
             ResultSet rs = ps.executeQuery();
 
-            // Si el usuario no existe
             if (!rs.next()) {
                 JOptionPane.showMessageDialog(this, "Usuario no registrado");
                 return;
             }
 
+            int idUsuario = rs.getInt("id");
             boolean activo = rs.getBoolean("activo");
             int intentos = rs.getInt("intentos");
             String passBD = rs.getString("password");
+            double saldo = rs.getDouble("saldo");
 
             if (!activo) {
                 JOptionPane.showMessageDialog(this, "Usuario bloqueado");
                 return;
             }
-            
-            // Si la contraseña es incorrecta
+
+            //Contraseña incorrecta
             if (!passBD.equals(contra)) {
                 intentos++;
 
                 String update = """
-                    UPDATE usuarios_cliente
+                    UPDATE usuarios
                     SET intentos = ?, activo = ?
-                    WHERE username = ?
+                    WHERE id = ?
                 """;
 
                 PreparedStatement ups = con.prepareStatement(update);
                 ups.setInt(1, intentos);
                 ups.setBoolean(2, intentos < 3);
-                ups.setString(3, usuario);
+                ups.setInt(3, idUsuario);
                 ups.executeUpdate();
 
                 JOptionPane.showMessageDialog(
@@ -97,20 +95,14 @@ public class Login extends JFrame {
                 return;
             }
 
-            // Si el login es correcto, se reinician los intentos
-            String reset = """
-                UPDATE usuarios_cliente
-                SET intentos = 0
-                WHERE username = ?
-            """;
+            //Cargar sesión
+            Sesion.idUsuario = idUsuario;
+            Sesion.username = usuario;
+            Sesion.saldo = saldo;
 
-            PreparedStatement resetPs = con.prepareStatement(reset);
-            resetPs.setString(1, usuario);
-            resetPs.executeUpdate();
-
-            JOptionPane.showMessageDialog(this, "Registro exitoso.");
+            JOptionPane.showMessageDialog(this, "Inicio de sesión exitoso");
             dispose();
-            new BancoForm(); // saldo = 1000
+            new BancoForm();
 
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error de conexión con la base de datos");
@@ -141,8 +133,6 @@ Código BancoForm.java:
 import javax.swing.*;
 
 public class BancoForm extends JFrame {
-
-    // Componentes del formulario
     private JPanel BancoPanel;
     private JButton depositarButton;
     private JButton retirarButton;
@@ -153,61 +143,45 @@ public class BancoForm extends JFrame {
     private JLabel JLabelBienvenido;
     private JLabel JLabelSaldo;
 
-    // Variable estática para compartir el saldo entre formularios
-    public static double saldo = 1000;
-
     public BancoForm() {
-        // Título de la ventana
         setTitle("Banco");
-
-        // Panel principal del formulario
         setContentPane(BancoPanel);
-
-        // Tamaño de la ventana
         setSize(500, 350);
-
-        // Cierra el programa al cerrar la ventana
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-
-        // Hace visible el formulario
         setVisible(true);
-
-        // Los campos no pueden ser editados por el usuario
         textUsuario.setEditable(false);
         TextFieldSaldoI.setEditable(false);
+        //Mostrar datos reales de la sesión
+        textUsuario.setText(Sesion.username);
+        TextFieldSaldoI.setText(String.valueOf(Sesion.saldo));
 
-        // Se muestran los datos iniciales
-        textUsuario.setText("      CLIENTE 1");
-        TextFieldSaldoI.setText(String.valueOf(saldo));
-
-        // Acciones de los botones
         depositarButton.addActionListener(e -> abrirDeposito());
         retirarButton.addActionListener(e -> abrirRetiro());
         transferenciaButton.addActionListener(e -> abrirTransferencia());
-        salirButton.addActionListener(e -> System.exit(0));
+        salirButton.addActionListener(e -> cerrarSesion());
     }
 
-    // Abre el formulario de depósito
     private void abrirDeposito() {
-        dispose(); // Cierra la ventana actual
-        new DepositarForm(); // Abre el formulario de depósito
+        dispose();
+        new DepositarForm();
     }
 
-    // Abre el formulario de retiro
     private void abrirRetiro() {
         dispose();
         new RetirarForm();
     }
 
-    // Abre el formulario de transferencia
     private void abrirTransferencia() {
         dispose();
         new TransferenciaForm();
     }
 
-    // Actualiza el campo del saldo
-    public static void actualizarSaldo(JTextField field) {
-        field.setText(String.valueOf(saldo));
+    private void cerrarSesion() {
+        Sesion.idUsuario = 0;
+        Sesion.username = null;
+        Sesion.saldo = 0;
+        dispose();
+        new Login();
     }
 }
 
@@ -227,9 +201,11 @@ Modifica directamente la variable BancoForm.saldo.
 
 Código DepositarForm.java:
 import javax.swing.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 public class DepositarForm extends JFrame {
-
     private JTextField MontoTextField;
     private JButton confirmarButton;
     private JButton cancelarButton;
@@ -243,93 +219,48 @@ public class DepositarForm extends JFrame {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setVisible(true);
 
-        // Acción del botón confirmar
         confirmarButton.addActionListener(e -> depositar());
-
-        // Acción del botón cancelar
         cancelarButton.addActionListener(e -> salir());
     }
 
-    // Método para realizar el depósito
     private void depositar() {
         try {
             double monto = Double.parseDouble(MontoTextField.getText());
 
-            // Validación del monto
+            // Validaciones
             if (monto <= 0) {
-                JOptionPane.showMessageDialog(this, "Monto invalido");
+                JOptionPane.showMessageDialog(this, "Ingrese un monto válido");
                 return;
             }
 
-            // Se suma el monto al saldo
-            BancoForm.saldo += monto;
+            // Actualizar en BD
+            Connection con = ConexionDB.getConexion();
+            String sql = """
+                UPDATE usuarios
+                SET saldo = saldo + ?
+                WHERE id = ?
+            """;
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setDouble(1, monto);
+            ps.setInt(2, Sesion.idUsuario);
+            ps.executeUpdate();
 
-            JOptionPane.showMessageDialog(this, "Deposito exitoso");
-
+            //Actualizar sesion
+            Sesion.saldo += monto;
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Deposito realizado con exito\nNuevo saldo: $" + Sesion.saldo
+            );
             dispose();
             new BancoForm();
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "ERROR >:|");
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Ingrese un numero válido");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error al realizar el deposito");
+            e.printStackTrace();
         }
     }
 
-    // Regresa al menú principal
-    private void salir() {
-        dispose();
-        new BancoForm();
-    }
-}
-
-import javax.swing.*;
-
-public class DepositarForm extends JFrame {
-
-    private JTextField MontoTextField;
-    private JButton confirmarButton;
-    private JButton cancelarButton;
-    private JLabel JLabelIMonto;
-    private JPanel DepositarPanel;
-
-    public DepositarForm() {
-        setTitle("Depositar");
-        setContentPane(DepositarPanel);
-        setSize(300, 200);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setVisible(true);
-
-        // Acción del botón confirmar
-        confirmarButton.addActionListener(e -> depositar());
-
-        // Acción del botón cancelar
-        cancelarButton.addActionListener(e -> salir());
-    }
-
-    // Método para realizar el depósito
-    private void depositar() {
-        try {
-            double monto = Double.parseDouble(MontoTextField.getText());
-
-            // Validación del monto
-            if (monto <= 0) {
-                JOptionPane.showMessageDialog(this, "Monto invalido");
-                return;
-            }
-
-            // Se suma el monto al saldo
-            BancoForm.saldo += monto;
-
-            JOptionPane.showMessageDialog(this, "Deposito exitoso");
-
-            dispose();
-            new BancoForm();
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "ERROR >:|");
-        }
-    }
-
-    // Regresa al menú principal
     private void salir() {
         dispose();
         new BancoForm();
@@ -352,9 +283,11 @@ Utiliza y modifica el saldo compartido del sistema.
 
 Código RetirarForm.java:
 import javax.swing.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 public class RetirarForm extends JFrame {
-
     private JTextField MontoTextField;
     private JButton confirmarButton;
     private JButton cancelarButton;
@@ -372,29 +305,45 @@ public class RetirarForm extends JFrame {
         cancelarButton.addActionListener(e -> salir());
     }
 
-    // Método para retirar dinero
     private void retirar() {
         try {
             double monto = Double.parseDouble(MontoTextField.getText());
-
+            //Validar monto
             if (monto <= 0) {
-                JOptionPane.showMessageDialog(this, "Monto invalido");
+                JOptionPane.showMessageDialog(this, "Ingrese un monto válido");
                 return;
             }
-
-            if (monto > BancoForm.saldo) {
+            // Validar saldo suficiente
+            if (monto > Sesion.saldo) {
                 JOptionPane.showMessageDialog(this, "Saldo insuficiente");
                 return;
             }
 
-            BancoForm.saldo -= monto;
-            JOptionPane.showMessageDialog(this, "Retiro exitoso");
+            // Actualizar en BD
+            Connection con = ConexionDB.getConexion();
+            String sql = """
+                UPDATE usuarios
+                SET saldo = saldo - ?
+                WHERE id = ?
+            """;
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setDouble(1, monto);
+            ps.setInt(2, Sesion.idUsuario);
+            ps.executeUpdate();
 
+            // Actualizar sesión
+            Sesion.saldo -= monto;
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Retiro realizado con exito\nNuevo saldo: $" + Sesion.saldo
+            );
             dispose();
             new BancoForm();
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "ERROR >:|");
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Ingrese un número válido");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error al realizar el retiro");
+            e.printStackTrace();
         }
     }
 
@@ -420,11 +369,13 @@ Comparte la lógica del saldo con los demás formularios.
 
 Código TransferenciaForm.java:
 import javax.swing.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 public class TransferenciaForm extends JFrame {
-
-    private JTextField textIDatos;
-    private JTextField textMDatos;
+    private JTextField textIDatos;   // destinatario
+    private JTextField textMDatos;   // se mantiene
     private JTextField MontoTextField;
     private JButton confirmarButton;
     private JButton cancelarButton;
@@ -441,59 +392,70 @@ public class TransferenciaForm extends JFrame {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setVisible(true);
 
-        validarButton.addActionListener(e -> validar());
         confirmarButton.addActionListener(e -> transferir());
         cancelarButton.addActionListener(e -> salir());
+        validarButton.setVisible(false); // ya no se usa
     }
 
-    // Valida que el destinatario esté ingresado
-    private void validar() {
-        if (textIDatos.getText().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Ingrese destinatario");
-        } else {
-            JOptionPane.showMessageDialog(this, "Destinatario valido");
-        }
-    }
-
-    // Realiza la transferencia
     private void transferir() {
         try {
             String destinatario = textIDatos.getText();
             double monto = Double.parseDouble(MontoTextField.getText());
 
+            // Validaciones simples
             if (destinatario.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Ingrese destinatario");
                 return;
             }
-
             if (monto <= 0) {
-                JOptionPane.showMessageDialog(this, "Monto invalido");
+                JOptionPane.showMessageDialog(this, "Monto inválido");
                 return;
             }
-
-            if (monto > BancoForm.saldo) {
+            if (monto > Sesion.saldo) {
                 JOptionPane.showMessageDialog(this, "Saldo insuficiente");
                 return;
             }
 
-            BancoForm.saldo -= monto;
+            Connection con = ConexionDB.getConexion();
+            //Restar al usuario actual
+            PreparedStatement restar = con.prepareStatement(
+                    "UPDATE usuarios SET saldo = saldo - ? WHERE id = ?"
+            );
+            restar.setDouble(1, monto);
+            restar.setInt(2, Sesion.idUsuario);
+            restar.executeUpdate();
 
-            JOptionPane.showMessageDialog(this,
-                    "Transferencia realizada a " + destinatario + " por $" + monto);
+            //Sumar al destinatario
+            PreparedStatement sumar = con.prepareStatement(
+                    "UPDATE usuarios SET saldo = saldo + ? WHERE username = ?"
+            );
+            sumar.setDouble(1, monto);
+            sumar.setString(2, destinatario);
+            sumar.executeUpdate();
 
+            //Actualizar sesion
+            Sesion.saldo -= monto;
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Transferencia realizada\nMonto: $" + monto +
+                            "\nSaldo actual: $" + Sesion.saldo
+            );
             dispose();
             new BancoForm();
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "ERROR >:|");
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Ingrese un número válido");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error al realizar la transferencia");
+            e.printStackTrace();
         }
     }
-
     private void salir() {
         dispose();
         new BancoForm();
     }
 }
+
+
 
 <img width="767" height="327" alt="image" src="https://github.com/user-attachments/assets/7fe4e74d-c1c3-4d8a-a06c-be8e8ac032df" />
 <img width="644" height="417" alt="image" src="https://github.com/user-attachments/assets/74631a34-0de3-48e2-9be8-e0e3cc77be17" />
@@ -507,23 +469,17 @@ Muestra mensajes en consola según el estado de la conexión.
 Abre el formulario de inicio de sesión.
 
 Código Main.java:
-import java.sql.Connection;
-
 public class Main {
 
     public static void main(String[] args) {
-
-        // Verificación de conexión a la base de datos
         try {
-            Connection con = ConexionDB.getConexion();
-            System.out.println("Conexión exitosa a PostgreSQL");
+            ConexionDB.getConexion();
+            System.out.println("Conexion exitosa");
+            new Login();
         } catch (Exception e) {
-            System.out.println("Error de conexión");
+            System.out.println("Error de conexion");
             e.printStackTrace();
         }
-
-        // Se abre el formulario de login
-        new Login();
     }
 }
 
@@ -543,22 +499,17 @@ import java.sql.SQLException;
 
 public class ConexionDB {
 
-    // Datos de conexión a PostgreSQL
     private static final String URL =
-            "jdbc:postgresql://localhost:5432/almacen";
-    private static final String USER = "postgres";
-    private static final String PASSWORD = "12345";
+            "jdbc:mysql://bbkfvleazphx4yonrovc-mysql.services.clever-cloud.com:3306/bbkfvleazphx4yonrovc?useSSL=true&serverTimezone=UTC";
+    private static final String USER = "u14xnegxgaclg9ln";
+    private static final String PASSWORD = "84wU6rejMj4trLG6QckI";
 
-    // Variable de conexión
     private static Connection conexion;
 
-    // Método que devuelve la conexión
     public static Connection getConexion() throws SQLException {
-
-        // Si no hay conexión o está cerrada, se crea una nueva
         if (conexion == null || conexion.isClosed()) {
             conexion = DriverManager.getConnection(URL, USER, PASSWORD);
         }
-
         return conexion;
     }
+}

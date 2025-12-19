@@ -515,3 +515,11 @@ public class ConexionDB {
         return conexion;
     }
 }
+
+Base de datos al inicio:
+<img width="900" height="166" alt="image" src="https://github.com/user-attachments/assets/08d00e72-3123-452c-beb9-be433b83c223" />
+
+Base de datos despues:
+<img width="900" height="154" alt="image" src="https://github.com/user-attachments/assets/7e230ac6-5e4b-472c-aafb-ccbaaf3e4579" />
+
+

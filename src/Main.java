@@ -1,13 +1,15 @@
 
-import java.sql.Connection;
+public class Main {
 
-void main() {
-    try {
-        Connection con = ConexionDB.getConexion();
-        System.out.println("✅ Conexión exitosa a PostgreSQL");
-    } catch (Exception e) {
-        System.out.println("❌ Error de conexión");
-        e.printStackTrace();
+    public static void main(String[] args) {
+        try {
+            ConexionDB.getConexion();
+            System.out.println("Conexion exitosa");
+            new Login();
+        } catch (Exception e) {
+            System.out.println("Error de conexion");
+            e.printStackTrace();
+        }
     }
-    new Login();
 }
+

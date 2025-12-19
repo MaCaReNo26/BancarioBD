@@ -1,4 +1,7 @@
 import javax.swing.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 public class DepositarForm extends JFrame {
     private JTextField MontoTextField;
@@ -21,21 +24,44 @@ public class DepositarForm extends JFrame {
     private void depositar() {
         try {
             double monto = Double.parseDouble(MontoTextField.getText());
+
+            // Validaciones
             if (monto <= 0) {
-                JOptionPane.showMessageDialog(this, "Monto invalido");
+                JOptionPane.showMessageDialog(this, "Ingrese un monto válido");
                 return;
             }
-            BancoForm.saldo += monto;
-            JOptionPane.showMessageDialog(this, "Deposito exitoso");
+
+            // Actualizar en BD
+            Connection con = ConexionDB.getConexion();
+            String sql = """
+                UPDATE usuarios
+                SET saldo = saldo + ?
+                WHERE id = ?
+            """;
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setDouble(1, monto);
+            ps.setInt(2, Sesion.idUsuario);
+            ps.executeUpdate();
+
+            //Actualizar sesion
+            Sesion.saldo += monto;
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Deposito realizado con exito\nNuevo saldo: $" + Sesion.saldo
+            );
             dispose();
             new BancoForm();
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "ERROR >:|");
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Ingrese un numero válido");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error al realizar el deposito");
+            e.printStackTrace();
         }
     }
+
     private void salir() {
         dispose();
         new BancoForm();
     }
 }
+

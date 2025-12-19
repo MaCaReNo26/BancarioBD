@@ -24,9 +24,10 @@ public class Login extends JFrame {
         try {
             Connection con = ConexionDB.getConexion();
 
+            //Consultar usuario
             String sql = """
-                SELECT password, activo, intentos
-                FROM usuarios_cliente
+                SELECT id, password, saldo, activo, intentos
+                FROM usuarios
                 WHERE username = ?
             """;
 
@@ -39,28 +40,31 @@ public class Login extends JFrame {
                 return;
             }
 
+            int idUsuario = rs.getInt("id");
             boolean activo = rs.getBoolean("activo");
             int intentos = rs.getInt("intentos");
             String passBD = rs.getString("password");
+            double saldo = rs.getDouble("saldo");
 
             if (!activo) {
                 JOptionPane.showMessageDialog(this, "Usuario bloqueado");
                 return;
             }
 
+            //Contraseña incorrecta
             if (!passBD.equals(contra)) {
                 intentos++;
 
                 String update = """
-                    UPDATE usuarios_cliente
+                    UPDATE usuarios
                     SET intentos = ?, activo = ?
-                    WHERE username = ?
+                    WHERE id = ?
                 """;
 
                 PreparedStatement ups = con.prepareStatement(update);
                 ups.setInt(1, intentos);
                 ups.setBoolean(2, intentos < 3);
-                ups.setString(3, usuario);
+                ups.setInt(3, idUsuario);
                 ups.executeUpdate();
 
                 JOptionPane.showMessageDialog(
@@ -69,20 +73,15 @@ public class Login extends JFrame {
                 );
                 return;
             }
-            
-            String reset = """
-                UPDATE usuarios_cliente
-                SET intentos = 0
-                WHERE username = ?
-            """;
 
-            PreparedStatement resetPs = con.prepareStatement(reset);
-            resetPs.setString(1, usuario);
-            resetPs.executeUpdate();
+            //Cargar sesión
+            Sesion.idUsuario = idUsuario;
+            Sesion.username = usuario;
+            Sesion.saldo = saldo;
 
-            JOptionPane.showMessageDialog(this, "Registro exitoso.");
+            JOptionPane.showMessageDialog(this, "Inicio de sesión exitoso");
             dispose();
-            new BancoForm(); // saldo = 1000
+            new BancoForm();
 
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error de conexión con la base de datos");
@@ -90,3 +89,4 @@ public class Login extends JFrame {
         }
     }
 }
+

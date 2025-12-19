@@ -11,41 +11,45 @@ public class BancoForm extends JFrame {
     private JLabel JLabelBienvenido;
     private JLabel JLabelSaldo;
 
-    public static double saldo = 1000;
-
     public BancoForm() {
         setTitle("Banco");
         setContentPane(BancoPanel);
         setSize(500, 350);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setVisible(true);
-
         textUsuario.setEditable(false);
         TextFieldSaldoI.setEditable(false);
-
-        textUsuario.setText("      CLIENTE 1");
-        TextFieldSaldoI.setText(String.valueOf(saldo));
+        //Mostrar datos reales de la sesión
+        textUsuario.setText(Sesion.username);
+        TextFieldSaldoI.setText(String.valueOf(Sesion.saldo));
 
         depositarButton.addActionListener(e -> abrirDeposito());
         retirarButton.addActionListener(e -> abrirRetiro());
         transferenciaButton.addActionListener(e -> abrirTransferencia());
-        salirButton.addActionListener(e -> System.exit(0));
+        salirButton.addActionListener(e -> cerrarSesion());
     }
 
     private void abrirDeposito() {
         dispose();
         new DepositarForm();
     }
+
     private void abrirRetiro() {
         dispose();
         new RetirarForm();
     }
+
     private void abrirTransferencia() {
         dispose();
         new TransferenciaForm();
     }
-    public static void actualizarSaldo(JTextField field) {
-        field.setText(String.valueOf(saldo));
+
+    private void cerrarSesion() {
+        Sesion.idUsuario = 0;
+        Sesion.username = null;
+        Sesion.saldo = 0;
+        dispose();
+        new Login();
     }
 }
 

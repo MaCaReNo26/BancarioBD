@@ -1,4 +1,7 @@
 import javax.swing.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 public class RetirarForm extends JFrame {
     private JTextField MontoTextField;
@@ -21,27 +24,45 @@ public class RetirarForm extends JFrame {
     private void retirar() {
         try {
             double monto = Double.parseDouble(MontoTextField.getText());
-
+            //Validar monto
             if (monto <= 0) {
-                JOptionPane.showMessageDialog(this, "Monto invalido");
+                JOptionPane.showMessageDialog(this, "Ingrese un monto válido");
                 return;
             }
-
-            if (monto > BancoForm.saldo) {
+            // Validar saldo suficiente
+            if (monto > Sesion.saldo) {
                 JOptionPane.showMessageDialog(this, "Saldo insuficiente");
                 return;
             }
 
-            BancoForm.saldo -= monto;
-            JOptionPane.showMessageDialog(this, "Retiro exitoso");
+            // Actualizar en BD
+            Connection con = ConexionDB.getConexion();
+            String sql = """
+                UPDATE usuarios
+                SET saldo = saldo - ?
+                WHERE id = ?
+            """;
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setDouble(1, monto);
+            ps.setInt(2, Sesion.idUsuario);
+            ps.executeUpdate();
 
+            // Actualizar sesión
+            Sesion.saldo -= monto;
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Retiro realizado con exito\nNuevo saldo: $" + Sesion.saldo
+            );
             dispose();
             new BancoForm();
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "ERROR >:|");
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Ingrese un número válido");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error al realizar el retiro");
+            e.printStackTrace();
         }
     }
+
     private void salir() {
         dispose();
         new BancoForm();
